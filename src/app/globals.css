@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Softer warm background + slightly softer text */
+  --background: 248 247 245;   /* #F8F7F5 */
+  --foreground: 55 65 81;      /* slate-700 */
+}
+
+html, body, #__next {
+  height: 100%;
+}
+
+body {
+  color: rgb(var(--foreground));
+  background: rgb(var(--background));
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}

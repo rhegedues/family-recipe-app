@@ -98,6 +98,105 @@ function blankWeek(): PlannerWeek {
   return { days: [...PlannerDays], slots: [...PlannerSlots], data };
 }
 
+function getSampleRecipes(): Recipe[] {
+  return [
+    {
+      id: "sample-1",
+      title: "Classic Spaghetti Carbonara",
+      description: "A traditional Italian pasta dish with eggs, cheese, and pancetta",
+      categories: ["Pasta", "Italian"],
+      time: { total: "30-60min" },
+      difficulty: "Medium",
+      cuisine: "Italian",
+      extraTags: ["Comfort Food", "Quick"],
+      ingredients: [
+        "400g spaghetti",
+        "200g pancetta or guanciale",
+        "4 large eggs",
+        "100g Pecorino Romano cheese",
+        "Black pepper",
+        "Salt"
+      ],
+      steps: [
+        "Bring a large pot of salted water to boil and cook spaghetti according to package directions",
+        "Cut pancetta into small cubes and cook in a large pan until crispy",
+        "Beat eggs with grated cheese and black pepper in a bowl",
+        "Drain pasta, reserving 1 cup of pasta water",
+        "Add hot pasta to the pan with pancetta, remove from heat",
+        "Quickly stir in egg mixture, adding pasta water as needed to create a creamy sauce",
+        "Serve immediately with extra cheese and black pepper"
+      ],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      schemaVersion: 1
+    },
+    {
+      id: "sample-2", 
+      title: "Grilled Salmon with Lemon Herbs",
+      description: "Simple and healthy grilled salmon with fresh herbs and lemon",
+      categories: ["Fish", "Healthy"],
+      time: { total: "<30min" },
+      difficulty: "Easy",
+      cuisine: "Mediterranean",
+      extraTags: ["High Protein", "Low Carb"],
+      ingredients: [
+        "4 salmon fillets (6oz each)",
+        "2 lemons",
+        "3 tbsp olive oil",
+        "2 cloves garlic, minced",
+        "2 tbsp fresh dill",
+        "2 tbsp fresh parsley",
+        "Salt and pepper"
+      ],
+      steps: [
+        "Preheat grill to medium-high heat",
+        "Mix olive oil, garlic, dill, parsley, salt, and pepper in a bowl",
+        "Brush salmon fillets with the herb mixture",
+        "Grill salmon for 4-5 minutes per side until fish flakes easily",
+        "Squeeze fresh lemon juice over the salmon before serving",
+        "Serve with steamed vegetables or a fresh salad"
+      ],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      schemaVersion: 1
+    },
+    {
+      id: "sample-3",
+      title: "Chicken Stir-Fry with Vegetables",
+      description: "Quick and colorful chicken stir-fry with mixed vegetables",
+      categories: ["Chicken", "Asian"],
+      time: { total: "30-60min" },
+      difficulty: "Easy",
+      cuisine: "Asian",
+      extraTags: ["One Pan", "High Protein"],
+      ingredients: [
+        "1 lb chicken breast, sliced",
+        "2 bell peppers, sliced",
+        "1 broccoli head, cut into florets",
+        "1 carrot, julienned",
+        "3 cloves garlic, minced",
+        "1 inch ginger, grated",
+        "3 tbsp soy sauce",
+        "2 tbsp sesame oil",
+        "1 tbsp cornstarch",
+        "2 tbsp vegetable oil"
+      ],
+      steps: [
+        "Mix soy sauce, sesame oil, and cornstarch in a bowl",
+        "Heat vegetable oil in a large wok or pan over high heat",
+        "Add chicken and cook until golden, about 5 minutes",
+        "Add garlic and ginger, stir for 30 seconds",
+        "Add vegetables and stir-fry for 3-4 minutes until crisp-tender",
+        "Pour sauce over everything and toss to combine",
+        "Serve over rice or noodles"
+      ],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      schemaVersion: 1
+    }
+  ];
+}
+
 function readPlanner(isoWeek: IsoWeekString): PlannerWeek {
   return getJSON<PlannerWeek>(`${STORAGE_PLANNER_PREFIX}${isoWeek}`, blankWeek());
 }
@@ -111,7 +210,7 @@ export const useRecipeStore = create<StoreState>()(
   persist(
     (set, get) => ({
       // data
-      recipes: getJSON<Recipe[]>(STORAGE_RECIPES, []),
+      recipes: getJSON<Recipe[]>(STORAGE_RECIPES, getSampleRecipes()),
       plannerByWeek: {},
 
       // filters

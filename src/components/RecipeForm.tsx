@@ -1,7 +1,8 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
-import { CATEGORY_PRESETS, TIME_OPTIONS, DIFFICULTY_OPTIONS, Recipe } from "@/types/recipe";
+import { CATEGORY_PRESETS, TIME_OPTIONS, DIFFICULTY_OPTIONS, Recipe, Ingredient, StepItem } from "@/types/recipe";
 import { useShortcuts } from "@/lib/useShortcuts";
+import { IngredientBuilder } from "@/components/recipe/IngredientBuilder";
 
 const CUISINE_PRESETS = [
   "Italian", "Mexican", "Chinese", "Japanese", "Indian", "Thai", 
@@ -49,8 +50,40 @@ export function RecipeForm({ initial, onSubmit, submitLabel = "Save", onCancel }
   const [difficulty, setDifficulty] = useState<string>(initial?.difficulty ?? "");
   const [cuisine, setCuisine] = useState<string>(initial?.cuisine ?? "");
   const [extraTags, setExtraTags] = useState<string[]>(initial?.extraTags ?? []);
-  const [ingredients, setIngredients] = useState((initial?.ingredients ?? []).join("\n"));
-  const [steps, setSteps] = useState((initial?.steps ?? []).join("\n"));
+  const [ingredients, setIngredients] = useState<Ingredient[]>(() => {
+    // Handle both old string[] and new Ingredient[] formats
+    if (initial?.ingredients && initial.ingredients.length > 0) {
+      const firstIngredient = initial.ingredients[0];
+      if (typeof firstIngredient === 'string') {
+        // Convert old format to new format
+        return (initial.ingredients as unknown as string[]).map(ing => ({
+          id: crypto.randomUUID(),
+          name: ing,
+          quantity: undefined,
+          unit: undefined,
+          note: undefined,
+        }));
+      }
+      return initial.ingredients as Ingredient[];
+    }
+    return [];
+  });
+  
+  const [steps, setSteps] = useState<StepItem[]>(() => {
+    // Handle both old string[] and new StepItem[] formats
+    if (initial?.steps && initial.steps.length > 0) {
+      const firstStep = initial.steps[0];
+      if (typeof firstStep === 'string') {
+        // Convert old format to new format
+        return (initial.steps as unknown as string[]).map(step => ({
+          id: crypto.randomUUID(),
+          text: step,
+        }));
+      }
+      return initial.steps as StepItem[];
+    }
+    return [];
+  });
   const [newCat, setNewCat] = useState("");
   const [newCuisine, setNewCuisine] = useState("");
   const [newTag, setNewTag] = useState("");
@@ -69,8 +102,7 @@ export function RecipeForm({ initial, onSubmit, submitLabel = "Save", onCancel }
       return;
     }
 
-    const ingredientsList = ingredients.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-    if (ingredientsList.length === 0) {
+    if (ingredients.length === 0) {
       setError("Please add at least one ingredient");
       return;
     }
@@ -83,8 +115,8 @@ export function RecipeForm({ initial, onSubmit, submitLabel = "Save", onCancel }
       difficulty: difficulty || undefined,
       cuisine: cuisine || undefined,
       extraTags: Array.from(new Set(extraTags.map((t) => t.trim()).filter(Boolean))),
-      ingredients: ingredientsList,
-      steps: steps.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
+      ingredients,
+      steps,
     };
 
     onSubmit(payload);
@@ -359,18 +391,10 @@ export function RecipeForm({ initial, onSubmit, submitLabel = "Save", onCancel }
       </div>
 
       {/* Ingredients */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Ingredients *
-        </label>
-        <Textarea
-          value={ingredients}
-          onChange={(e) => setIngredients(e.target.value)}
-          placeholder="Enter each ingredient on a new line"
-          rows={6}
-          required
-        />
-      </div>
+      <IngredientBuilder
+        value={ingredients}
+        onChange={setIngredients}
+      />
 
       {/* Steps */}
       <div>
@@ -378,8 +402,15 @@ export function RecipeForm({ initial, onSubmit, submitLabel = "Save", onCancel }
           Instructions
         </label>
         <Textarea
-          value={steps}
-          onChange={(e) => setSteps(e.target.value)}
+          value={steps.map(step => step.text).join('\n')}
+          onChange={(e) => {
+            const stepTexts = e.target.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+            const newSteps = stepTexts.map(text => ({
+              id: crypto.randomUUID(),
+              text,
+            }));
+            setSteps(newSteps);
+          }}
           placeholder="Enter each step on a new line"
           rows={6}
         />

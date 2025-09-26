@@ -1,4 +1,39 @@
-import type { Recipe } from '@/types/recipe';
+import type { Recipe, Ingredient, StepItem } from '@/types/recipe';
+
+// Helper function to convert string array to structured ingredients
+function migrateIngredients(ingredients: any): Ingredient[] {
+  if (!Array.isArray(ingredients)) return [];
+  
+  // If already structured, return as-is
+  if (ingredients.length > 0 && typeof ingredients[0] === 'object' && ingredients[0].id) {
+    return ingredients as Ingredient[];
+  }
+  
+  // Convert string array to structured format
+  return ingredients.map((ingredient: string) => ({
+    id: crypto.randomUUID(),
+    name: String(ingredient).trim(),
+    quantity: undefined,
+    unit: undefined,
+    note: undefined,
+  }));
+}
+
+// Helper function to convert string array to structured steps
+function migrateSteps(steps: any): StepItem[] {
+  if (!Array.isArray(steps)) return [];
+  
+  // If already structured, return as-is
+  if (steps.length > 0 && typeof steps[0] === 'object' && steps[0].id) {
+    return steps as StepItem[];
+  }
+  
+  // Convert string array to structured format
+  return steps.map((step: string) => ({
+    id: crypto.randomUUID(),
+    text: String(step).trim(),
+  }));
+}
 
 export function migrateRecipe(raw: any): Recipe {
   const categories: string[] =
@@ -24,8 +59,10 @@ export function migrateRecipe(raw: any): Recipe {
     difficulty: raw?.difficulty ?? null,
     cuisine: raw?.cuisine ?? null,
     extraTags,
-    ingredients: Array.isArray(raw?.ingredients) ? raw.ingredients.map(String) : [],
-    steps: Array.isArray(raw?.steps) ? raw.steps.map(String) : [],
+    ingredients: migrateIngredients(raw?.ingredients),
+    steps: migrateSteps(raw?.steps),
+    source: raw?.source,
+    photo: raw?.photo ?? null,
     createdAt: raw?.createdAt ?? new Date().toISOString(),
     updatedAt: raw?.updatedAt ?? new Date().toISOString(),
     schemaVersion: 1,

@@ -1,51 +1,108 @@
-# Family Recipe App
+# 🍲 Family Recipe App
 
-## Overview
-The Family Recipe App helps families collect, organize, and plan meals easily.  
-The app supports **recipe management** and a **weekly meal planner**, with a focus on clean UI and quick filtering.
+A web app to collect, organize, and plan family meals.  
+Focus: clean UI, quick filtering, and a weekly meal planner.
 
 ---
 
-## Current Features (after Sprint 1 ✅)
+## 🚀 Quickstart
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Run the dev server
+npm run dev
+
+# 3. Build for production
+npm run build
+npm start
+
+The app runs at http://localhost:3000
+---
+
+## 🌍 Deployment
+
+The app is deployed via **Vercel**, connected to the GitHub repo.
+
+### Setup
+1. Push code to GitHub (main branch).
+2. Connect the repo to Vercel.
+3. Vercel automatically builds & deploys on each push to main.
+
+### Environment
+- Data tools (`/data` page) are **disabled by default** in production.
+- To enable them in Vercel, set the env variable:  
+  `NEXT_PUBLIC_ENABLE_DATA_TOOLS=true`
+
+### URLs
+- **Production:** https://your-vercel-app-url.vercel.app  
+- **Preview:** every PR/branch gets a unique preview deployment.
+
+
+## 📦 Features
+
+### ✅ Current (after Sprint 2)
+
 1. **Recipe Management**
    - Add, edit, delete recipes with confirmation dialogs  
    - Multi-category tags (Course, Diet, Cuisine, Time, Difficulty, Extra)  
    - Title, description, ingredients, steps  
+   - Dedicated Recipe Detail Page (`/recipes/[id]`) with badges, categories, description, ingredients, steps  
+   - Edit & Delete available only on detail page (with confirmation + toasts)  
 
 2. **Search & Filtering**
    - Full-text search across titles, ingredients, steps, tags  
-   - Category filter chips (AND logic)  
+   - Category filter chips with AND logic  
+   - Active chip styling (filled + white text)  
 
 3. **Meal Planner**
    - Week-based planner stored in localStorage  
-   - Basic grid view (Breakfast, Lunch, Dinner slots)  
+   - Grid view with Breakfast / Lunch / Dinner slots  
+   - Week navigation (Prev / This Week / Next) with date ranges  
+   - Quick Add Dialog (search + insert recipe into slots by Enter/click)  
+   - Stack multiple recipes per slot, with clean wrapping layout  
+   - Links from planner slots to recipe detail pages  
+   - Clear week button  
 
-4. **UI & UX**
+4. **Data Management**
+   - JSON schema with `schemaVersion`  
+   - Export recipes + planner as JSON  
+   - Import JSON (validate + merge by ID)  
+   - `/data` page (hidden in production unless enabled with env flag)  
+
+5. **UI & UX**
    - Tailwind theming with gradient hero + clean cards  
    - Save/Discard confirmation dialogs  
+   - Toast notifications (Save/Delete/Import/Export)  
+   - Keyboard shortcuts (Esc to close dialogs, Cmd/Ctrl+Enter to save)  
+   - Accessibility improvements (aria labels, focus trap, dialog roles)  
    - Hydration issues fixed  
 
----
-
-## In Progress (Sprint 2 🚀)
-- **Meal Planner polish** (navigation, quick add dialog, recipe linking)  
-- **Data management** (import/export JSON, sample data)  
-- **Recipe detail page** (print-friendly, copy link)  
-- **Filter polish** (active chip styling, removable pills, filter panel)  
-- **UX refinements** (toasts, keyboard shortcuts, accessibility)  
-- **Deployment** (Vercel prep, favicon, SEO, 404 page)  
-
-See 👉 [`SPRINT2.md`](./SPRINT2.md) for the detailed sprint backlog.  
+6. **Deployment**
+   - Vercel deployment ready  
+   - Favicon + SEO meta tags (title, description, open graph)  
+   - Custom 404 page  
 
 ---
 
+### 🔄 In Progress
+
+- Meal planner: duplicate week button, “Add to Planner” from recipe cards, jump-to-recipes link  
+- Recipe detail page: print-friendly stylesheet, copy link button, visual polish  
+- Data management: sample data loader (dev-only)  
+- Filters: removable pills, advanced filter panel  
+- UX: more visual polish on recipe detail & filter UI  
+
+See 👉 [`SPRINT2.md`](./SPRINT2.md) and 👉 [`SPRINT3.md`](./SPRINT3.md) for the detailed sprint backlog.  
+
+---
 ## Tech Stack
-- **Frontend**: Next.js (React + App Router)  
-- **UI**: TailwindCSS  
-- **State Management**: Zustand  
-- **Search**: Fuse.js  
-- **Storage**: localStorage (for planner + recipes, with import/export)  
-
+Framework: Next.js (React + App Router)
+UI: TailwindCSS
+State: Zustand
+Search: Fuse.js
+Storage: localStorage (recipes + planner, import/export tools)
 ---
 
 ## Future Backlog
@@ -66,36 +123,32 @@ See 👉 [`SPRINT2.md`](./SPRINT2.md) for the detailed sprint backlog.
 - Multi-user/household mode 👨‍👩‍👧‍👦  
 - Mobile UX enhancements (swipe-to-delete, tap-hold move) 📱  
 - Seed library (open dataset ingestion) 🌍
+- Payment and subscription management
 
+📖 Full backlog & priorities → ./ROADMAP.md
 ---
 
-## How to Run
-```bash
-# install dependencies
-npm install
 
-# run dev server
-npm run dev
-
-# build for production
-npm run build
 ```
 
 ---
 
-## Data Management Tools
+## Data Tools
 
-The app includes Export/Import functionality for recipes and meal plans, but it's **disabled by default** for security. To enable data management tools:
+The app supports export/import of recipes and meal plans, but these are disabled by default.
+Enable with an env flag during development:
 
-### Enable Data Tools (Development)
-```bash
-# Option 1: Set environment variable when starting dev server
+# Option 1: Run with env variable
 NEXT_PUBLIC_ENABLE_DATA_TOOLS=true npm run dev
 
-# Option 2: Create .env.local file
+# Option 2: .env.local file
 echo "NEXT_PUBLIC_ENABLE_DATA_TOOLS=true" > .env.local
 npm run dev
-```
+
+Then restart and look for “Data” in the nav bar.
+# Export → download JSON of recipes + planner
+# Import → upload JSON (merge or replace mode)
+# In production: disabled by default (404 unless env flag is set)
 
 ### Access Data Tools
 1. **Enable the environment variable** (see above)

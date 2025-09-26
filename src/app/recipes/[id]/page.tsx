@@ -155,11 +155,29 @@ export default function RecipeDetailPage() {
           <h2 className="text-2xl font-semibold mb-4">Ingredients</h2>
           <Card className="p-6">
             <ul className="space-y-2 list-disc list-inside">
-              {recipe.ingredients.map((ingredient, index) => (
-                <li key={index} className="text-gray-700 leading-6">
-                  {ingredient}
-                </li>
-              ))}
+              {recipe.ingredients.map((ingredient, index) => {
+                // Handle both old string format and new structured format
+                if (typeof ingredient === 'string') {
+                  return (
+                    <li key={index} className="text-gray-700 leading-6">
+                      {ingredient}
+                    </li>
+                  );
+                }
+                
+                // New structured format
+                const parts = [];
+                if (ingredient.quantity) parts.push(ingredient.quantity);
+                if (ingredient.unit) parts.push(ingredient.unit);
+                if (ingredient.name) parts.push(ingredient.name);
+                if (ingredient.note) parts.push(`(${ingredient.note})`);
+                
+                return (
+                  <li key={ingredient.id} className="text-gray-700 leading-6">
+                    {parts.join(' ')}
+                  </li>
+                );
+              })}
             </ul>
           </Card>
         </div>
@@ -170,17 +188,23 @@ export default function RecipeDetailPage() {
         <div className="mb-8">
           <h2 className="text-2xl font-semibold mb-4">Instructions</h2>
           <div className="space-y-4">
-            {recipe.steps.map((step, index) => (
-              <Card key={index} className="p-6">
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <span className="inline-flex items-center justify-center w-8 h-8 bg-orange-500 text-white rounded-full text-sm font-bold">
-                    {index + 1}
-                  </span>
-                  <div style={{ width: '16px' }}></div>
-                  <span className="text-gray-700">{step.replace(/\n/g, ' ').trim()}</span>
-                </div>
-              </Card>
-            ))}
+            {recipe.steps.map((step, index) => {
+              // Handle both old string format and new structured format
+              const stepText = typeof step === 'string' ? step : step.text;
+              const stepId = typeof step === 'string' ? index : step.id;
+              
+              return (
+                <Card key={stepId} className="p-6">
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <span className="inline-flex items-center justify-center w-8 h-8 bg-orange-500 text-white rounded-full text-sm font-bold">
+                      {index + 1}
+                    </span>
+                    <div style={{ width: '16px' }}></div>
+                    <span className="text-gray-700">{stepText.replace(/\n/g, ' ').trim()}</span>
+                  </div>
+                </Card>
+              );
+            })}
           </div>
         </div>
       )}

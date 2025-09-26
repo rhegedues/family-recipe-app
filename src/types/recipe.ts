@@ -6,7 +6,24 @@ export const CATEGORY_PRESETS = [
 export const TIME_OPTIONS = ["<30 min", "30-60 min", "60-120 min", "120 min +"] as const;
 export const DIFFICULTY_OPTIONS = ["Easy", "Medium", "Hard"] as const;
 
+export const UNIT_OPTIONS = [
+  "g", "kg", "ml", "l", "tsp", "tbsp", "cup", "piece", "Custom"
+] as const;
+
 export type Difficulty = 'Easy' | 'Medium' | 'Hard';
+
+export type Ingredient = {
+  id: string;
+  name: string;
+  quantity?: string;
+  unit?: string;
+  note?: string;
+};
+
+export type StepItem = {
+  id: string;
+  text: string;
+};
 
 export type Recipe = {
   id: string;
@@ -24,9 +41,13 @@ export type Recipe = {
   // optional extra tagging
   extraTags?: string[];
 
-  // content
-  ingredients: string[];
-  steps: string[];
+  // content - structured format
+  ingredients: Ingredient[];
+  steps: StepItem[];
+
+  // optional fields
+  source?: string;
+  photo?: string | null;
 
   // bookkeeping
   createdAt?: string; // ISO

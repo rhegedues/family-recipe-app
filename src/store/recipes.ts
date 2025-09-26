@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { persist } from "zustand/middleware";
 // import { v4 as uuidv4 } from "uuid";
-import { migrateRecipes } from './normalize';
-import type { Recipe } from '@/types/recipe';
+import { migrateRecipes, migrateRecipe } from './normalize';
+import type { Recipe, Ingredient } from '@/types/recipe';
 import {
   PlannerWeek,
   PlannerDays,
@@ -33,6 +33,12 @@ type StoreState = {
     updates: Partial<Omit<Recipe, "id" | "createdAt" | "updatedAt" | "schemaVersion">>
   ) => void;
   deleteRecipe: (id: string) => void;
+
+  // ingredient management
+  addIngredient: (recipeId: string, ingredient: Omit<Ingredient, "id">) => void;
+  updateIngredient: (recipeId: string, ingredientId: string, updates: Partial<Omit<Ingredient, "id">>) => void;
+  removeIngredient: (recipeId: string, ingredientId: string) => void;
+  reorderIngredients: (recipeId: string, startIndex: number, endIndex: number) => void;
 
   // filter setters
   setTextQuery: (q: string) => void;
@@ -110,21 +116,21 @@ function getSampleRecipes(): Recipe[] {
       cuisine: "Italian",
       extraTags: ["Comfort Food", "Quick"],
       ingredients: [
-        "400g spaghetti",
-        "200g pancetta or guanciale",
-        "4 large eggs",
-        "100g Pecorino Romano cheese",
-        "Black pepper",
-        "Salt"
+        { id: "sample-1-ing-1", name: "spaghetti", quantity: "400", unit: "g" },
+        { id: "sample-1-ing-2", name: "pancetta or guanciale", quantity: "200", unit: "g" },
+        { id: "sample-1-ing-3", name: "large eggs", quantity: "4", unit: "piece" },
+        { id: "sample-1-ing-4", name: "Pecorino Romano cheese", quantity: "100", unit: "g" },
+        { id: "sample-1-ing-5", name: "Black pepper" },
+        { id: "sample-1-ing-6", name: "Salt" }
       ],
       steps: [
-        "Bring a large pot of salted water to boil and cook spaghetti according to package directions",
-        "Cut pancetta into small cubes and cook in a large pan until crispy",
-        "Beat eggs with grated cheese and black pepper in a bowl",
-        "Drain pasta, reserving 1 cup of pasta water",
-        "Add hot pasta to the pan with pancetta, remove from heat",
-        "Quickly stir in egg mixture, adding pasta water as needed to create a creamy sauce",
-        "Serve immediately with extra cheese and black pepper"
+        { id: "sample-1-step-1", text: "Bring a large pot of salted water to boil and cook spaghetti according to package directions" },
+        { id: "sample-1-step-2", text: "Cut pancetta into small cubes and cook in a large pan until crispy" },
+        { id: "sample-1-step-3", text: "Beat eggs with grated cheese and black pepper in a bowl" },
+        { id: "sample-1-step-4", text: "Drain pasta, reserving 1 cup of pasta water" },
+        { id: "sample-1-step-5", text: "Add hot pasta to the pan with pancetta, remove from heat" },
+        { id: "sample-1-step-6", text: "Quickly stir in egg mixture, adding pasta water as needed to create a creamy sauce" },
+        { id: "sample-1-step-7", text: "Serve immediately with extra cheese and black pepper" }
       ],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -140,21 +146,21 @@ function getSampleRecipes(): Recipe[] {
       cuisine: "Mediterranean",
       extraTags: ["High Protein", "Low Carb"],
       ingredients: [
-        "4 salmon fillets (6oz each)",
-        "2 lemons",
-        "3 tbsp olive oil",
-        "2 cloves garlic, minced",
-        "2 tbsp fresh dill",
-        "2 tbsp fresh parsley",
-        "Salt and pepper"
+        { id: "sample-2-ing-1", name: "salmon fillets", quantity: "4", unit: "piece", note: "6oz each" },
+        { id: "sample-2-ing-2", name: "lemons", quantity: "2", unit: "piece" },
+        { id: "sample-2-ing-3", name: "olive oil", quantity: "3", unit: "tbsp" },
+        { id: "sample-2-ing-4", name: "garlic", quantity: "2", unit: "piece", note: "minced" },
+        { id: "sample-2-ing-5", name: "fresh dill", quantity: "2", unit: "tbsp" },
+        { id: "sample-2-ing-6", name: "fresh parsley", quantity: "2", unit: "tbsp" },
+        { id: "sample-2-ing-7", name: "Salt and pepper" }
       ],
       steps: [
-        "Preheat grill to medium-high heat",
-        "Mix olive oil, garlic, dill, parsley, salt, and pepper in a bowl",
-        "Brush salmon fillets with the herb mixture",
-        "Grill salmon for 4-5 minutes per side until fish flakes easily",
-        "Squeeze fresh lemon juice over the salmon before serving",
-        "Serve with steamed vegetables or a fresh salad"
+        { id: "sample-2-step-1", text: "Preheat grill to medium-high heat" },
+        { id: "sample-2-step-2", text: "Mix olive oil, garlic, dill, parsley, salt, and pepper in a bowl" },
+        { id: "sample-2-step-3", text: "Brush salmon fillets with the herb mixture" },
+        { id: "sample-2-step-4", text: "Grill salmon for 4-5 minutes per side until fish flakes easily" },
+        { id: "sample-2-step-5", text: "Squeeze fresh lemon juice over the salmon before serving" },
+        { id: "sample-2-step-6", text: "Serve with steamed vegetables or a fresh salad" }
       ],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -170,25 +176,25 @@ function getSampleRecipes(): Recipe[] {
       cuisine: "Asian",
       extraTags: ["One Pan", "High Protein"],
       ingredients: [
-        "1 lb chicken breast, sliced",
-        "2 bell peppers, sliced",
-        "1 broccoli head, cut into florets",
-        "1 carrot, julienned",
-        "3 cloves garlic, minced",
-        "1 inch ginger, grated",
-        "3 tbsp soy sauce",
-        "2 tbsp sesame oil",
-        "1 tbsp cornstarch",
-        "2 tbsp vegetable oil"
+        { id: "sample-3-ing-1", name: "chicken breast", quantity: "1", unit: "lb", note: "sliced" },
+        { id: "sample-3-ing-2", name: "bell peppers", quantity: "2", unit: "piece", note: "sliced" },
+        { id: "sample-3-ing-3", name: "broccoli head", quantity: "1", unit: "piece", note: "cut into florets" },
+        { id: "sample-3-ing-4", name: "carrot", quantity: "1", unit: "piece", note: "julienned" },
+        { id: "sample-3-ing-5", name: "garlic", quantity: "3", unit: "piece", note: "minced" },
+        { id: "sample-3-ing-6", name: "ginger", quantity: "1", unit: "inch", note: "grated" },
+        { id: "sample-3-ing-7", name: "soy sauce", quantity: "3", unit: "tbsp" },
+        { id: "sample-3-ing-8", name: "sesame oil", quantity: "2", unit: "tbsp" },
+        { id: "sample-3-ing-9", name: "cornstarch", quantity: "1", unit: "tbsp" },
+        { id: "sample-3-ing-10", name: "vegetable oil", quantity: "2", unit: "tbsp" }
       ],
       steps: [
-        "Mix soy sauce, sesame oil, and cornstarch in a bowl",
-        "Heat vegetable oil in a large wok or pan over high heat",
-        "Add chicken and cook until golden, about 5 minutes",
-        "Add garlic and ginger, stir for 30 seconds",
-        "Add vegetables and stir-fry for 3-4 minutes until crisp-tender",
-        "Pour sauce over everything and toss to combine",
-        "Serve over rice or noodles"
+        { id: "sample-3-step-1", text: "Mix soy sauce, sesame oil, and cornstarch in a bowl" },
+        { id: "sample-3-step-2", text: "Heat vegetable oil in a large wok or pan over high heat" },
+        { id: "sample-3-step-3", text: "Add chicken and cook until golden, about 5 minutes" },
+        { id: "sample-3-step-4", text: "Add garlic and ginger, stir for 30 seconds" },
+        { id: "sample-3-step-5", text: "Add vegetables and stir-fry for 3-4 minutes until crisp-tender" },
+        { id: "sample-3-step-6", text: "Pour sauce over everything and toss to combine" },
+        { id: "sample-3-step-7", text: "Serve over rice or noodles" }
       ],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -257,6 +263,79 @@ export const useRecipeStore = create<StoreState>()(
         setJSON(STORAGE_RECIPES, get().recipes);
       },
 
+      /* ---- ingredient management ---- */
+
+      addIngredient: (recipeId, ingredient) => {
+        const newIngredient: Ingredient = {
+          ...ingredient,
+          id: crypto.randomUUID(),
+        };
+        
+        set((s) => ({
+          recipes: s.recipes.map((r) =>
+            r.id === recipeId
+              ? {
+                  ...r,
+                  ingredients: [...r.ingredients, newIngredient],
+                  updatedAt: new Date().toISOString(),
+                }
+              : r
+          ),
+        }));
+        setJSON(STORAGE_RECIPES, get().recipes);
+      },
+
+      updateIngredient: (recipeId, ingredientId, updates) => {
+        set((s) => ({
+          recipes: s.recipes.map((r) =>
+            r.id === recipeId
+              ? {
+                  ...r,
+                  ingredients: r.ingredients.map((ing) =>
+                    ing.id === ingredientId ? { ...ing, ...updates } : ing
+                  ),
+                  updatedAt: new Date().toISOString(),
+                }
+              : r
+          ),
+        }));
+        setJSON(STORAGE_RECIPES, get().recipes);
+      },
+
+      removeIngredient: (recipeId, ingredientId) => {
+        set((s) => ({
+          recipes: s.recipes.map((r) =>
+            r.id === recipeId
+              ? {
+                  ...r,
+                  ingredients: r.ingredients.filter((ing) => ing.id !== ingredientId),
+                  updatedAt: new Date().toISOString(),
+                }
+              : r
+          ),
+        }));
+        setJSON(STORAGE_RECIPES, get().recipes);
+      },
+
+      reorderIngredients: (recipeId, startIndex, endIndex) => {
+        set((s) => ({
+          recipes: s.recipes.map((r) => {
+            if (r.id !== recipeId) return r;
+            
+            const ingredients = [...r.ingredients];
+            const [movedIngredient] = ingredients.splice(startIndex, 1);
+            ingredients.splice(endIndex, 0, movedIngredient);
+            
+            return {
+              ...r,
+              ingredients,
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+        }));
+        setJSON(STORAGE_RECIPES, get().recipes);
+      },
+
       /* ---- filter setters ---- */
 
       setTextQuery: (q) => set({ textQuery: q }),
@@ -273,13 +352,20 @@ export const useRecipeStore = create<StoreState>()(
         const q = textQuery.trim().toLowerCase();
         
         return recipes.filter((r) => {
-          // text haystack
+          // text haystack - handle both old and new formats
+          const ingredientTexts = r.ingredients.map(ing => 
+            typeof ing === 'string' ? ing : ing.name
+          );
+          const stepTexts = r.steps.map(step => 
+            typeof step === 'string' ? step : step.text
+          );
+          
           const haystack = [
             r.title,
             r.description || '',
             ...r.categories,
-            ...r.ingredients,
-            ...r.steps,
+            ...ingredientTexts,
+            ...stepTexts,
             r.difficulty || '',
             r.cuisine || '',
             ...(r.extraTags || []),
@@ -377,18 +463,8 @@ export const useRecipeStore = create<StoreState>()(
           
           const mergedRecipes = [...currentRecipes];
           for (const importedRecipe of validated.recipes) {
-            // Normalize date fields to strings
-            const normalizedRecipe = {
-              ...importedRecipe,
-              createdAt: importedRecipe.createdAt ? 
-                (typeof importedRecipe.createdAt === 'number' ? 
-                  new Date(importedRecipe.createdAt).toISOString() : 
-                  importedRecipe.createdAt) : undefined,
-              updatedAt: importedRecipe.updatedAt ? 
-                (typeof importedRecipe.updatedAt === 'number' ? 
-                  new Date(importedRecipe.updatedAt).toISOString() : 
-                  importedRecipe.updatedAt) : undefined,
-            };
+            // Use migrateRecipe to ensure proper format conversion
+            const normalizedRecipe = migrateRecipe(importedRecipe);
             
             const existingIndex = mergedRecipes.findIndex(r => r.id === normalizedRecipe.id);
             if (existingIndex >= 0) {

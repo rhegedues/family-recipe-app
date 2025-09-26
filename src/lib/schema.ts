@@ -1,7 +1,22 @@
 import { z } from 'zod';
-import type { Recipe, IsoWeekString, PlannerWeek } from '@/types/recipe';
+import type { Recipe, IsoWeekString, PlannerWeek, Ingredient, StepItem } from '@/types/recipe';
 
-// Recipe schema for export/import
+// Ingredient schema
+export const IngredientSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  quantity: z.string().optional(),
+  unit: z.string().optional(),
+  note: z.string().optional(),
+});
+
+// Step schema
+export const StepSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+});
+
+// Recipe schema for export/import - supports both old and new formats
 export const RecipeSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -20,8 +35,18 @@ export const RecipeSchema = z.object({
   difficulty: z.union([z.string(), z.null()]).optional(),
   cuisine: z.union([z.string(), z.null()]).optional(),
   extraTags: z.array(z.string()).optional(),
-  ingredients: z.array(z.string()),
-  steps: z.array(z.string()),
+  // Support both old (string[]) and new (Ingredient[]) formats
+  ingredients: z.union([
+    z.array(z.string()), // Legacy format
+    z.array(IngredientSchema) // New structured format
+  ]),
+  // Support both old (string[]) and new (StepItem[]) formats
+  steps: z.union([
+    z.array(z.string()), // Legacy format
+    z.array(StepSchema) // New structured format
+  ]),
+  source: z.string().optional(),
+  photo: z.union([z.string(), z.null()]).optional(),
   createdAt: z.union([z.string(), z.number()]).transform(val => 
     typeof val === 'number' ? new Date(val).toISOString() : val
   ).optional(),
@@ -54,7 +79,30 @@ export function validateExportData(data: unknown): ExportData {
 }
 
 export function validateRecipe(data: unknown): Recipe {
-  return RecipeSchema.parse(data);
+  const parsed = RecipeSchema.parse(data);
+  
+  // Transform old format to new format
+  const ingredients = Array.isArray(parsed.ingredients) 
+    ? parsed.ingredients.map(ing => 
+        typeof ing === 'string' 
+          ? { id: crypto.randomUUID(), name: ing, quantity: undefined, unit: undefined, note: undefined }
+          : ing
+      )
+    : [];
+    
+  const steps = Array.isArray(parsed.steps)
+    ? parsed.steps.map(step =>
+        typeof step === 'string'
+          ? { id: crypto.randomUUID(), text: step }
+          : step
+      )
+    : [];
+  
+  return {
+    ...parsed,
+    ingredients,
+    steps,
+  };
 }
 
 export function validatePlannerWeek(data: unknown): PlannerWeek {

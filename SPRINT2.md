@@ -1,8 +1,24 @@
 # Family Recipe App — Sprint 2
 
-## Sprint 2 Scope (with Priorities)
+## 🎯 Goals
+- Extend the app from a static recipe library (Sprint 1) into something more *usable day-to-day*.  
+- Enable users to **plan meals week by week** and **view detailed recipes**.  
+- Lay the groundwork for **data portability** (import/export JSON) so content can persist outside local browser storage.  
+- Prepare the app for first **public deployment** (Vercel).  
 
-> 💡 Tip: To work on a task, copy its line (e.g. `Task: [ ] ...`) into Cursor chat — this gives Cursor the exact context it needs.
+---
+
+## 📋 Requirements
+- **Meal Planner**: practical weekly grid with navigation, add/remove recipes, and link to details.  
+- **Recipe Detail Page**: a central place to view, edit, and delete recipes (instead of recipe list).  
+- **Data Management**: import/export capability using a JSON schema (future-proofing).  
+- **Filters**: start improving usability of search and category chips.  
+- **UX polish**: toasts, shortcuts, accessibility to make it feel like a real app.  
+- **Deployment**: run smoothly on Vercel with proper metadata, favicon, and error pages.  
+
+---
+
+## ✅ Implemented Tasks
 
 ### 🚨 Must (non-negotiable)
 
@@ -22,10 +38,10 @@
 
 **Recipe Detail Page**
 - [x] `/recipes/[id]` page with title, categories, badges, description, ingredients, steps
-- [x] **Enable Edit & Delete on detail page only** (with confirmation + proper redirects/toasts)
+- [x] Enable Edit & Delete on detail page only (with confirmation + proper redirects/toasts)
 
 **Recipes List**
-- [x] **Remove Edit/Delete buttons from recipe cards/list items** (list should only navigate to detail)
+- [x] Remove Edit/Delete buttons from recipe cards/list items (list should only navigate to detail)
 
 **Data Management**
 - [x] Define JSON schema with `schemaVersion`
@@ -34,15 +50,16 @@
 - [x] Create /data page but hide it in production
 
 **Filters**
-- [ ] Active chip styling (filled, white text)
+- [x] Active chip styling (filled, white text)
 
 **UX Refinements**
 - [x] Toast notifications (Save/Delete/Import/Export)
-- [ ] Keyboard shortcuts (Esc to close, Cmd/Ctrl+Enter to save)
-- [ ] Accessibility: aria-labels, dialog roles, focus trap
+- [x] Keyboard shortcuts (Esc to close, Cmd/Ctrl+Enter to save)
+- [x] Accessibility: aria-labels, dialog roles, focus trap
 
 **Deployment**
-- [ ] Prepare for Vercel deployment
+- [x] Prepare for Vercel deployment
+- [x] Deploy App
 
 ---
 
@@ -67,11 +84,11 @@
 - [ ] Filter panel (⚙️ with Time, Difficulty, Cuisine, Extra tags)
 
 **UX Refinements**
-- [ ] Focus management (return focus to trigger after modal close)
+- [x] Focus management (return focus to trigger after modal close)
 
 **Deployment**
-- [ ] Favicon + SEO meta tags (title, description, open graph)
-- [ ] Simple 404 page
+- [x] Favicon + SEO meta tags (title, description, open graph)
+- [x] Simple 404 page
 
 ---
 
@@ -82,11 +99,34 @@
 
 ---
 
+## 💡 Decisions & Rationale
+- Chose **local JSON + schema** for data management: avoids backend setup but keeps migration path open.  
+- Moved Edit/Delete exclusively to **Recipe Detail Page**: simplifies the list view and reduces UI clutter.  
+- Built **import/export tools** but hid them in production: balances flexibility for dev/testing with safety for public use.  
+- Prioritized **deployment polish** (favicon, SEO, 404): to ensure first live version feels professional, even if feature set is still minimal.  
+
+---
+
+## ⚠️ Known Issues / Limitations
+- User data still stored in browser localStorage — clearing cache wipes it.  
+- Duplicate week and “Add to Planner from card” not yet implemented.  
+- Recipe detail still missing print-friendly view and copy-link button.  
+- Filters lack removable pills and a proper panel.  
+- Sample data loader not finished (empty installs may start blank).  
+
+---
+
+## 🔜 Next Steps
+- **Sprint 3**: focus on persistence (beyond localStorage), planner improvements, and filter polish.  
+- Start preparing structured recipe input (step/ingredient builders) as a future sprint.  
+- Expand Data Management to allow seeding with sample data.  
+
+---
+
 ## Suggested Flow
 - **Week 1:** Cleanup + Planner Core + Recipe Detail basics  
 - **Week 2:** Data Management + Filter polish  
 - **Week 3:** UX refinements + Deployment polish  
-
 ---
 
 ## Dependency Map

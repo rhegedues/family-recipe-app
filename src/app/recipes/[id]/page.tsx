@@ -1,26 +1,29 @@
 "use client";
+
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useRecipeStore } from "@/store/recipes";
+import { useRecipeStore, type Recipe } from "@/store/recipes";
 import { Button, Card } from "@/components/UI";
+import { RecipeForm } from "@/components/RecipeForm";
 import { ArrowLeft, Edit, Trash2, Clock, Users, ChefHat } from "lucide-react";
 
 export default function RecipeDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { recipes, deleteRecipe } = useRecipeStore();
-  
+  const { recipes, updateRecipe, deleteRecipe } = useRecipeStore();
+
   const recipeId = params.id as string;
   const recipe = recipes.find((r) => r.id === recipeId);
+
+  const [editing, setEditing] = useState(false);
 
   if (!recipe) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-8">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Recipe Not Found</h1>
-          <p className="text-gray-600 mb-6">The recipe you're looking for doesn't exist.</p>
-          <Button onClick={() => router.push("/recipes")}>
-            Back to Recipes
-          </Button>
+          <h1 className="mb-4 text-2xl font-bold text-gray-900">Recipe Not Found</h1>
+          <p className="mb-6 text-gray-600">The recipe you're looking for doesn't exist.</p>
+          <Button onClick={() => router.push("/recipes")}>Back to Recipes</Button>
         </div>
       </div>
     );
@@ -32,37 +35,110 @@ export default function RecipeDetailPage() {
     );
     if (confirmed) {
       deleteRecipe(recipe.id);
-      // Show success message (simple alert for now)
       alert(`Recipe "${recipe.title}" has been deleted successfully.`);
       router.push("/recipes");
     }
   };
 
-  const handleEdit = () => {
-    // Navigate to recipes page with edit mode enabled
-    router.push(`/recipes?edit=${recipe.id}`);
-  };
+  const handleEdit = () => setEditing(true);
+
+  // --- small helper to coerce null -> undefined for optional fields
+  function sanitizePatch(data: any): Partial<Recipe> {
+    const patch: Partial<Recipe> = {
+      ...data,
+      // strings
+      title: data.title ?? undefined,
+      description: data.description ?? undefined,
+      difficulty:
+        data.difficulty === null ? undefined : (data.difficulty as string | undefined),
+      cuisine: data.cuisine === null ? undefined : (data.cuisine as string | undefined),
+      // arrays (keep as-is or empty)
+      categories: Array.isArray(data.categories) ? data.categories : undefined,
+      tags: Array.isArray(data.tags) ? data.tags : undefined,
+      extraTags: Array.isArray(data.extraTags) ? data.extraTags : undefined,
+      ingredients: Array.isArray(data.ingredients) ? data.ingredients : undefined,
+      steps: Array.isArray(data.steps) ? data.steps : undefined,
+      // time
+      time:
+        data.time == null
+          ? undefined
+          : {
+              ...data.time,
+              total:
+                data.time.total === null
+                  ? undefined
+                  : (data.time.total as number | string | undefined),
+            },
+    };
+    return patch;
+  }
+
+  function toTimestamp(v: unknown): number | undefined {
+    if (v instanceof Date) return v.getTime();
+    if (typeof v === "string" || typeof v === "number") {
+      const d = new Date(v);
+      const t = d.getTime();
+      return Number.isNaN(t) ? undefined : t;
+    }
+    return undefined;
+  }
+
+  function fmtDate(v: unknown): string {
+    const ts = toTimestamp(v);
+    return ts ? new Date(ts).toLocaleDateString() : "Unknown";
+  }
+
+  if (editing) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-8">
+        <div className="mb-4">
+          <Button
+            variant="secondary"
+            onClick={() => setEditing(false)}
+            iconLeft={<ArrowLeft className="h-4 w-4" />}
+          >
+            Back
+          </Button>
+        </div>
+
+        <RecipeForm
+          initial={recipe}
+          submitLabel="Save"
+          onCancel={() => setEditing(false)}
+          onSubmit={(data) => {
+            const patch = sanitizePatch(data);
+            updateRecipe(recipe.id, patch);  // ✅ types now compatible
+            setEditing(false);
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
-      {/* Header with back button */}
+      {/* Header with back & actions */}
       <div className="mb-6 flex items-center gap-4">
         <Button
           variant="secondary"
-          onClick={() => router.push('/recipes')}
-          iconLeft={<ArrowLeft className="w-4 h-4" />}
+          onClick={() => router.push("/recipes")}
+          iconLeft={<ArrowLeft className="h-4 w-4" />}
         >
           Back
         </Button>
         <div className="flex-1" />
-        <Button variant="secondary" onClick={handleEdit} iconLeft={<Edit className="w-4 h-4" />}>
+        <Button
+          variant="secondary"
+          onClick={handleEdit}               // opens inline editor
+          iconLeft={<Edit className="h-4 w-4" />}
+        >
           Edit Recipe
         </Button>
         <Button
           variant="secondary"
           onClick={handleDelete}
-          iconLeft={<Trash2 className="w-4 h-4" />}
-          className="text-red-600 hover:bg-red-50 border-red-200 hover:border-red-300"
+          iconLeft={<Trash2 className="h-4 w-4" />}
+          className="border-red-200 text-red-600 hover:border-red-300 hover:bg-red-50"
         >
           Delete Recipe
         </Button>
@@ -70,20 +146,20 @@ export default function RecipeDetailPage() {
 
       {/* Recipe Header */}
       <div className="mb-8">
-        <h1 className="text-4xl font-bold text-gray-900 mb-2">{recipe.title}</h1>
+        <h1 className="mb-2 text-4xl font-bold text-gray-900">{recipe.title}</h1>
         {recipe.description && (
-          <p className="text-xl text-gray-600">{recipe.description}</p>
+          <p className="text-xl text-gray-600">{String(recipe.description)}</p>
         )}
-        
+
         {/* Categories */}
-        {recipe.categories.length > 0 && (
+        {(recipe.categories?.length ?? 0) > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">
-            {recipe.categories.map((category) => (
+            {(recipe.categories ?? []).map((category) => (
               <span
-                key={category}
+                key={String(category)}
                 className="rounded-full bg-orange-100 px-3 py-1 text-sm font-medium text-orange-800"
               >
-                {category}
+                {String(category)}
               </span>
             ))}
           </div>
@@ -91,15 +167,19 @@ export default function RecipeDetailPage() {
       </div>
 
       {/* Recipe Meta Info */}
-      <div className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
         {/* Time */}
         {recipe.time?.total && (
           <Card className="p-4">
             <div className="flex items-center gap-3">
-              <Clock className="w-5 h-5 text-orange-500" />
+              <Clock className="h-5 w-5 text-orange-500" />
               <div>
                 <p className="text-sm text-gray-600">Time</p>
-                <p className="font-medium">{typeof recipe.time.total === 'number' ? `${recipe.time.total} minutes` : recipe.time.total}</p>
+                <p className="font-medium">
+                  {typeof recipe.time.total === "number"
+                    ? `${recipe.time.total} minutes`
+                    : String(recipe.time.total)}
+                </p>
               </div>
             </div>
           </Card>
@@ -109,10 +189,10 @@ export default function RecipeDetailPage() {
         {recipe.difficulty && (
           <Card className="p-4">
             <div className="flex items-center gap-3">
-              <Users className="w-5 h-5 text-orange-500" />
+              <Users className="h-5 w-5 text-orange-500" />
               <div>
                 <p className="text-sm text-gray-600">Difficulty</p>
-                <p className="font-medium">{recipe.difficulty}</p>
+                <p className="font-medium">{String(recipe.difficulty)}</p>
               </div>
             </div>
           </Card>
@@ -122,10 +202,10 @@ export default function RecipeDetailPage() {
         {recipe.cuisine && (
           <Card className="p-4">
             <div className="flex items-center gap-3">
-              <ChefHat className="w-5 h-5 text-orange-500" />
+              <ChefHat className="h-5 w-5 text-orange-500" />
               <div>
                 <p className="text-sm text-gray-600">Cuisine</p>
-                <p className="font-medium">{recipe.cuisine}</p>
+                <p className="font-medium">{String(recipe.cuisine)}</p>
               </div>
             </div>
           </Card>
@@ -133,16 +213,16 @@ export default function RecipeDetailPage() {
       </div>
 
       {/* Extra Tags */}
-      {recipe.extraTags && recipe.extraTags.length > 0 && (
+      {(recipe.extraTags?.length ?? 0) > 0 && (
         <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">Tags</h2>
+          <h2 className="mb-4 text-xl font-semibold">Tags</h2>
           <div className="flex flex-wrap gap-2">
-            {recipe.extraTags.map((tag) => (
+            {(recipe.extraTags ?? []).map((tag) => (
               <span
-                key={tag}
+                key={String(tag)}
                 className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-800"
               >
-                {tag}
+                {String(tag)}
               </span>
             ))}
           </div>
@@ -150,14 +230,14 @@ export default function RecipeDetailPage() {
       )}
 
       {/* Ingredients */}
-      {recipe.ingredients.length > 0 && (
+      {(recipe.ingredients?.length ?? 0) > 0 && (
         <div className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">Ingredients</h2>
+          <h2 className="mb-4 text-2xl font-semibold">Ingredients</h2>
           <Card className="p-6">
-            <ul className="space-y-2 list-disc list-inside">
-              {recipe.ingredients.map((ingredient, index) => (
-                <li key={index} className="text-gray-700 leading-6">
-                  {ingredient}
+            <ul className="list-inside list-disc space-y-2">
+              {(recipe.ingredients ?? []).map((ingredient, idx) => (
+                <li key={idx} className="leading-6 text-gray-700">
+                  {String(ingredient)}
                 </li>
               ))}
             </ul>
@@ -166,18 +246,20 @@ export default function RecipeDetailPage() {
       )}
 
       {/* Steps */}
-      {recipe.steps.length > 0 && (
+      {(recipe.steps?.length ?? 0) > 0 && (
         <div className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">Instructions</h2>
+          <h2 className="mb-4 text-2xl font-semibold">Instructions</h2>
           <div className="space-y-4">
-            {recipe.steps.map((step, index) => (
-              <Card key={index} className="p-6">
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <span className="inline-flex items-center justify-center w-8 h-8 bg-orange-500 text-white rounded-full text-sm font-bold">
-                    {index + 1}
+            {(recipe.steps ?? []).map((step, idx) => (
+              <Card key={idx} className="p-6">
+                <div className="flex items-center">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-orange-500 text-sm font-bold text-white">
+                    {idx + 1}
                   </span>
-                  <div style={{ width: '16px' }}></div>
-                  <span className="text-gray-700">{step.replace(/\n/g, ' ').trim()}</span>
+                  <div className="w-4" />
+                  <span className="text-gray-700">
+                    {String(step).replace(/\n/g, " ").trim()}
+                  </span>
                 </div>
               </Card>
             ))}
@@ -186,12 +268,16 @@ export default function RecipeDetailPage() {
       )}
 
       {/* Created/Updated info */}
-      <div className="mt-8 pt-6 border-t border-gray-200 text-sm text-gray-500">
-        <p>Created: {recipe.createdAt ? new Date(recipe.createdAt).toLocaleDateString() : 'Unknown'}</p>
-        {recipe.updatedAt && recipe.updatedAt !== recipe.createdAt && (
-          <p>Updated: {new Date(recipe.updatedAt).toLocaleDateString()}</p>
-        )}
-      </div>
+      <div className="mt-8 border-t border-gray-200 pt-6 text-sm text-gray-500">
+  <p>Created: {fmtDate(recipe.createdAt)}</p>
+  {(() => {
+    const createdTs = toTimestamp(recipe.createdAt);
+    const updatedTs = toTimestamp(recipe.updatedAt);
+    return updatedTs && updatedTs !== createdTs ? (
+      <p>Updated: {new Date(updatedTs).toLocaleDateString()}</p>
+    ) : null;
+  })()}
+</div>
     </div>
   );
 }

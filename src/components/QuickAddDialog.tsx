@@ -66,47 +66,46 @@ export function QuickAddDialog({ open, onOpenChange, weekId, day, slot }: Props)
   };
 
   // Build the tag list for filtering
-  const allTags: Array<{ category: string; tag: string }> =
-    React.useMemo(() => {
-      const out: Array<{ category: string; tag: string }> = [];
+  const allTags: Array<{ category: string; tag: string }> = React.useMemo(() => {
+    const out: Array<{ category: string; tag: string }> = [];
 
-      for (const r of recipes) {
-        // Add categories
-        for (const cat of r.categories) {
-          const s = (cat ?? "").toString().trim();
-          if (s) out.push({ category: "Category", tag: s });
-        }
-
-        // Add difficulty
-        if (r.difficulty) {
-          const s = (r.difficulty ?? "").toString().trim();
-          if (s) out.push({ category: "Difficulty", tag: s });
-        }
-
-        // Add cuisine
-        if (r.cuisine) {
-          const s = (r.cuisine ?? "").toString().trim();
-          if (s) out.push({ category: "Cuisine", tag: s });
-        }
-
-        // Add extra tags
-        for (const tag of r.extraTags || []) {
-          const s = (tag ?? "").toString().trim();
-          if (s) out.push({ category: "Extra", tag: s });
-        }
+    for (const r of recipes) {
+      // Categories (optional)
+      for (const cat of r.categories ?? []) {
+        const s = (cat ?? "").toString().trim();
+        if (s) out.push({ category: "Category", tag: s });
       }
 
-      // de-dupe (case-insensitive) and ignore empties
-      const seen = new Set<string>();
-      return out.filter(({ category, tag }) => {
+      // Difficulty (optional)
+      if (r.difficulty) {
+        const s = r.difficulty.toString().trim();
+        if (s) out.push({ category: "Difficulty", tag: s });
+      }
+
+      // Cuisine (optional)
+      if (r.cuisine) {
+        const s = r.cuisine.toString().trim();
+        if (s) out.push({ category: "Cuisine", tag: s });
+      }
+
+      // Extra tags (already optional)
+      for (const tag of r.extraTags ?? []) {
         const s = (tag ?? "").toString().trim();
-        if (!s) return false;
-        const key = `${category}::${s.toLowerCase()}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-    }, [recipes]);
+        if (s) out.push({ category: "Extra", tag: s });
+      }
+    }
+
+    // de-dupe (case-insensitive)
+    const seen = new Set<string>();
+    return out.filter(({ category, tag }) => {
+      const s = (tag ?? "").toString().trim();
+      if (!s) return false;
+      const key = `${category}::${s.toLowerCase()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [recipes]);
 
   return (
     <div

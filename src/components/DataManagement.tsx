@@ -48,7 +48,10 @@ export function DataManagement() {
 
     try {
       const text = await file.text();
-      const result = importData(text, replacePlanner);
+      const result = importData(
+        text,
+        replacePlanner ? { mode: "replace" } : { mode: "merge" }
+      );
       setImportResult(result);
       
       if (result.success) {

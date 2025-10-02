@@ -1,95 +1,102 @@
 "use client";
 
-import * as React from "react";
-import Link from "next/link";
-import { useRecipeStore, type Recipe } from "@/store/recipes";
+import { useMemo, useState } from "react";
+import { useRecipeStore } from "@/store/recipes";
+import { RecipeCard } from "@/components/RecipeCard";
+import TagPill from "@/components/TagPill";
+import type { Recipe } from "@/types/recipe";
 
-export default function RecipesClient({ initialQuery }: { initialQuery: string }) {
+type Props = { initialQuery?: string };
+
+export default function RecipesClient({ initialQuery = "" }: Props) {
+  // 🔹 get recipes directly from the store
   const recipes = useRecipeStore((s) => s.recipes);
 
-  const [query, setQuery] = React.useState(initialQuery ?? "");
-  const filtered = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return recipes;
-    return recipes.filter((r) =>
-      [
-        r.title,
-        r.description,
-        ...(Array.isArray(r.categories) ? r.categories : []),
-        ...(Array.isArray(r.tags) ? r.tags : []),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(q)
+  const chipsOf = (r: Recipe): string[] => [
+    ...(r.categories ?? []),
+    ...(((r as any).extraTags as string[]) ?? []),
+  ];
+
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    (recipes ?? []).forEach((r) => chipsOf(r).forEach((t) => set.add(t)));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [recipes]);
+
+  const [query, setQuery] = useState(initialQuery);
+  const [activeTags, setActiveTags] = useState<string[]>([]);
+
+  const toggleTag = (tag: string) =>
+    setActiveTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
-  }, [recipes, query]);
+
+  const clearFilters = () => {
+    setQuery("");
+    setActiveTags([]);
+  };
+
+  const filtered = useMemo(() => {
+    const list = recipes ?? [];
+    const q = query.trim().toLowerCase();
+
+    return list.filter((r) => {
+      const title = r.title?.toLowerCase?.() ?? "";
+      const desc = (r.description ?? "").toLowerCase();
+      const chips = chipsOf(r);
+
+      const matchesQuery =
+        !q ||
+        title.includes(q) ||
+        desc.includes(q) ||
+        chips.some((t) => t.toLowerCase().includes(q));
+
+      const matchesTags =
+        activeTags.length === 0 || activeTags.every((t) => chips.includes(t));
+
+      return matchesQuery && matchesTags;
+    });
+  }, [recipes, query, activeTags]);
 
   return (
-    <section className="mt-6">
-      <div className="mb-4 flex items-center gap-3">
+    <section className="space-y-4">
+      <div className="flex items-center gap-2">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search recipes…"
-          className="w-full max-w-md rounded-md border px-3 py-2 text-sm"
+          className="w-full md:w-80 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          aria-label="Search recipes"
         />
-        <span className="text-sm text-gray-500">{filtered.length} result(s)</span>
+        {(query || activeTags.length > 0) && (
+          <button type="button" onClick={clearFilters} className="text-sm underline">
+            Clear
+          </button>
+        )}
       </div>
 
-      {filtered.length === 0 ? (
-        <EmptyState />
-      ) : (
-        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((r) => (
-            <li key={r.id}>
-              <RecipeCard recipe={r} />
-            </li>
+      {allTags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {allTags.map((t) => (
+            <TagPill
+              key={t}
+              tag={t}
+              active={activeTags.includes(t)}
+              onClick={toggleTag}
+            />
           ))}
-        </ul>
+        </div>
+      )}
+
+      {filtered.length === 0 ? (
+        <p className="text-sm text-slate-500 italic">No recipes match.</p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((r) => (
+            <RecipeCard key={r.id} recipe={r} />
+          ))}
+        </div>
       )}
     </section>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="rounded-md border p-6 text-sm text-gray-600">
-      No recipes match your search.
-    </div>
-  );
-}
-
-function RecipeCard({ recipe }: { recipe: Recipe }) {
-  const cats =
-    (Array.isArray(recipe.categories) ? recipe.categories : []) ??
-    (Array.isArray((recipe as any).tags) ? (recipe as any).tags : []);
-
-  return (
-    <Link
-      href={`/recipes/${encodeURIComponent(recipe.id)}`}
-      className="block rounded-lg border p-4 hover:bg-gray-50"
-    >
-      <h3 className="mb-1 line-clamp-1 text-lg font-semibold">{recipe.title}</h3>
-      {recipe.description ? (
-        <p className="mb-3 line-clamp-2 text-sm text-gray-600">{String(recipe.description)}</p>
-      ) : null}
-
-      {cats?.length ? (
-        <div className="flex flex-wrap gap-2">
-          {cats.slice(0, 4).map((c) => (
-            <span
-              key={String(c)}
-              className="rounded-full border px-2 py-0.5 text-xs text-gray-600"
-            >
-              {String(c)}
-            </span>
-          ))}
-          {cats.length > 4 && (
-            <span className="text-xs text-gray-500">+{cats.length - 4} more</span>
-          )}
-        </div>
-      ) : null}
-    </Link>
   );
 }

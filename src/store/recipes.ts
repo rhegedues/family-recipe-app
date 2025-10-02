@@ -1,254 +1,494 @@
-import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { create } from 'zustand';
+import { persist } from "zustand/middleware";
+// import { v4 as uuidv4 } from "uuid";
+import { migrateRecipes } from './normalize';
+import type { Recipe } from '@/types/recipe';
+import {
+  PlannerWeek,
+  PlannerDays,
+  PlannerSlots,
+  PlannerDay,
+  PlannerSlot,
+  IsoWeekString,
+} from "@/types/recipe";
+import { getJSON, setJSON, isBrowser } from "@/lib/storage";
+import { validateExportData, createExportFilename, type ExportData } from "@/lib/schema";
 
-/* ========= Recipe types ========= */
-
-export type Ingredient = { id: string; name: string; quantity?: string; unit?: string; note?: string };
-export type StepItem = { id: string; text: string };
-export type RecipeTime = { prep?: number; cook?: number; total?: number | string; unit?: string };
-
-export type Recipe = {
-  id: string;
-  title: string;
-  description?: string;
-  ingredients: any[] | string[]; // tolerant during recovery
-  steps: any[] | string[];       // tolerant during recovery
-  tags?: string[];
-  categories?: string[];
-  difficulty?: string;
-  cuisine?: string;
-  extraTags?: string[];
-  time?: RecipeTime;
-} & Record<string, unknown>; // TEMP: tolerate extras while stabilizing
-
-export type ImportResult = { success: boolean; message: string };
-
-/* ========= Planner types (match components) ========= */
-
-export type IsoWeekString = `${number}-W${string}`;
-export type PlannerDay = string;   // "Mon" | "Tue" | ... (component provides)
-export type PlannerSlot = string;  // "Breakfast" | "Lunch" | "Dinner" ... (component provides)
-
-export type PlannerGrid = Record<PlannerDay, Record<PlannerSlot, string[]>>;
-export type PlannerWeek = { data: PlannerGrid }; // <-- MealPlanner uses week.data[day][slot]
-
-function makeEmptyGrid(): PlannerGrid {
-  return {
-    Mon: { Breakfast: [], Lunch: [], Dinner: [] },
-    Tue: { Breakfast: [], Lunch: [], Dinner: [] },
-    Wed: { Breakfast: [], Lunch: [], Dinner: [] },
-    Thu: { Breakfast: [], Lunch: [], Dinner: [] },
-    Fri: { Breakfast: [], Lunch: [], Dinner: [] },
-    Sat: { Breakfast: [], Lunch: [], Dinner: [] },
-    Sun: { Breakfast: [], Lunch: [], Dinner: [] },
-  } as PlannerGrid;
-}
-
-/* ISO week helpers */
-function getIsoWeekId(d = new Date()): IsoWeekString {
-  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const dayNum = (date.getUTCDay() + 6) % 7; // Mon=0..Sun=6
-  date.setUTCDate(date.getUTCDate() - dayNum + 3); // Thu of current week
-  const firstThu = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
-  const week =
-    1 +
-    Math.round(
-      ((date.getTime() - firstThu.getTime()) / 86400000 - 3 + ((firstThu.getUTCDay() + 6) % 7)) / 7
-    );
-  const year = date.getUTCFullYear();
-  return `${year}-W${String(week).padStart(2, "0")}` as IsoWeekString;
-}
-function parseIsoWeek(id: IsoWeekString): { year: number; week: number } {
-  const m = id.match(/^(\d+)-W(\d{1,2})$/);
-  return { year: Number(m?.[1] ?? new Date().getUTCFullYear()), week: Number(m?.[2] ?? 1) };
-}
-function isoWeekToDate({ year, week }: { year: number; week: number }): Date {
-  const simple = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
-  const dow = (simple.getUTCDay() + 6) % 7;
-  simple.setUTCDate(simple.getUTCDate() - dow + 3); // Thu
-  return simple;
-}
-function offsetIsoWeek(id: IsoWeekString, delta: number): IsoWeekString {
-  const baseThu = isoWeekToDate(parseIsoWeek(id));
-  baseThu.setUTCDate(baseThu.getUTCDate() + delta * 7);
-  return getIsoWeekId(baseThu);
-}
-
-/* ========= Store ========= */
-
-type RecipeState = {
-  /* Recipes */
+type StoreState = {
+  // data
   recipes: Recipe[];
-  addRecipe: (r: Recipe) => void;
-  setRecipes: (rs: Recipe[]) => void;
-  updateRecipe: (id: string, patch: Partial<Recipe>) => void;
-  deleteRecipe: (id: string) => void;
-
-  /* Import/Export */
-  exportData: () => string;
-  importData: (jsonText: string, options?: { mode?: "merge" | "replace" }) => ImportResult;
-
-  /* Planner — match MealPlanner.tsx expectations */
   plannerByWeek: Record<IsoWeekString, PlannerWeek>;
 
+  // filters
+  textQuery: string;
+  selectedCategories: string[];
+  selectedTagsByCategory: Record<string, string[]>;
+
+  // recipe ops
+  addRecipe: (
+    input: Omit<Recipe, "id" | "createdAt" | "updatedAt" | "schemaVersion"> & { id?: string }
+  ) => string;
+  updateRecipe: (
+    id: string,
+    updates: Partial<Omit<Recipe, "id" | "createdAt" | "updatedAt" | "schemaVersion">>
+  ) => void;
+  deleteRecipe: (id: string) => void;
+
+  // filter setters
+  setTextQuery: (q: string) => void;
+  setSelectedCategories: (cats: string[]) => void;
+  setSelectedTags: (section: string, tags: string[]) => void;
+
+  // derived
+  filterRecipes: () => Recipe[];
+
+  // planner
   getCurrentIsoWeek: () => IsoWeekString;
-  ensureWeek: (weekId: IsoWeekString) => void;
-  getWeek: (weekId: IsoWeekString) => PlannerWeek;
+  nextWeek: (isoWeek: IsoWeekString) => IsoWeekString;
+  prevWeek: (isoWeek: IsoWeekString) => IsoWeekString;
+  ensureWeek: (isoWeek: IsoWeekString) => void;
+  addToSlot: (
+    isoWeek: IsoWeekString,
+    day: PlannerDay,
+    slot: PlannerSlot,
+    recipeId: string
+  ) => void;
+  removeFromSlot: (
+    isoWeek: IsoWeekString,
+    day: PlannerDay,
+    slot: PlannerSlot,
+    recipeId: string
+  ) => void;
+  clearWeek: (isoWeek: IsoWeekString) => void;
 
-  /* navigation helpers */
-  offsetWeek: (weekId: IsoWeekString, delta: number) => IsoWeekString;
-  prevWeek: (weekId: IsoWeekString) => IsoWeekString;
-  nextWeek: (weekId: IsoWeekString) => IsoWeekString;
-
-  /* slot operations (aliases for clarity) */
-  addToSlot: (weekId: IsoWeekString, day: PlannerDay, slot: PlannerSlot, recipeId: string) => void;
-  removeFromSlot: (weekId: IsoWeekString, day: PlannerDay, slot: PlannerSlot, recipeId: string) => void;
-
-  /* convenience used by UI */
-  clearWeek: (weekId: IsoWeekString) => void;
+  // data management
+  exportData: () => string; // Returns JSON string
+  importData: (jsonData: string, replacePlanner?: boolean) => { success: boolean; message: string; };
 };
 
-const noopStorage = {
-  getItem: (_: string) => null,
-  setItem: (_: string, __: string) => {},
-  removeItem: (_: string) => {},
-};
+const STORAGE_RECIPES = "fra:recipes";
+const STORAGE_PLANNER_PREFIX = "fra:planner:";
 
-export const useRecipeStore = create<RecipeState>()(
+/* ---------- helpers ---------- */
+
+function computeIsoWeek(date: Date): IsoWeekString {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  const year = d.getUTCFullYear();
+  return `${year}-W${String(weekNo).padStart(2, "0")}`;
+}
+
+function firstDateOfIsoWeek(year: number, week: number): Date {
+  const simple = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
+  const dow = simple.getUTCDay();
+  const ISOweekStart = simple;
+  if (dow <= 4) ISOweekStart.setUTCDate(simple.getUTCDate() - simple.getUTCDay() + 1);
+  else ISOweekStart.setUTCDate(simple.getUTCDate() + 8 - simple.getUTCDay());
+  return ISOweekStart;
+}
+
+function blankWeek(): PlannerWeek {
+  const data = {} as PlannerWeek["data"];
+  for (const day of PlannerDays) {
+    data[day] = { Breakfast: [], Lunch: [], Dinner: [] };
+  }
+  return { days: [...PlannerDays], slots: [...PlannerSlots], data };
+}
+
+function getSampleRecipes(): Recipe[] {
+  return [
+    {
+      id: "sample-1",
+      title: "Classic Spaghetti Carbonara",
+      description: "A traditional Italian pasta dish with eggs, cheese, and pancetta",
+      categories: ["Pasta", "Italian"],
+      time: { total: "30-60min" },
+      difficulty: "Medium",
+      cuisine: "Italian",
+      extraTags: ["Comfort Food", "Quick"],
+      ingredients: [
+        "400g spaghetti",
+        "200g pancetta or guanciale",
+        "4 large eggs",
+        "100g Pecorino Romano cheese",
+        "Black pepper",
+        "Salt"
+      ],
+      steps: [
+        "Bring a large pot of salted water to boil and cook spaghetti according to package directions",
+        "Cut pancetta into small cubes and cook in a large pan until crispy",
+        "Beat eggs with grated cheese and black pepper in a bowl",
+        "Drain pasta, reserving 1 cup of pasta water",
+        "Add hot pasta to the pan with pancetta, remove from heat",
+        "Quickly stir in egg mixture, adding pasta water as needed to create a creamy sauce",
+        "Serve immediately with extra cheese and black pepper"
+      ],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      schemaVersion: 1
+    },
+    {
+      id: "sample-2", 
+      title: "Grilled Salmon with Lemon Herbs",
+      description: "Simple and healthy grilled salmon with fresh herbs and lemon",
+      categories: ["Fish", "Healthy"],
+      time: { total: "<30min" },
+      difficulty: "Easy",
+      cuisine: "Mediterranean",
+      extraTags: ["High Protein", "Low Carb"],
+      ingredients: [
+        "4 salmon fillets (6oz each)",
+        "2 lemons",
+        "3 tbsp olive oil",
+        "2 cloves garlic, minced",
+        "2 tbsp fresh dill",
+        "2 tbsp fresh parsley",
+        "Salt and pepper"
+      ],
+      steps: [
+        "Preheat grill to medium-high heat",
+        "Mix olive oil, garlic, dill, parsley, salt, and pepper in a bowl",
+        "Brush salmon fillets with the herb mixture",
+        "Grill salmon for 4-5 minutes per side until fish flakes easily",
+        "Squeeze fresh lemon juice over the salmon before serving",
+        "Serve with steamed vegetables or a fresh salad"
+      ],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      schemaVersion: 1
+    },
+    {
+      id: "sample-3",
+      title: "Chicken Stir-Fry with Vegetables",
+      description: "Quick and colorful chicken stir-fry with mixed vegetables",
+      categories: ["Chicken", "Asian"],
+      time: { total: "30-60min" },
+      difficulty: "Easy",
+      cuisine: "Asian",
+      extraTags: ["One Pan", "High Protein"],
+      ingredients: [
+        "1 lb chicken breast, sliced",
+        "2 bell peppers, sliced",
+        "1 broccoli head, cut into florets",
+        "1 carrot, julienned",
+        "3 cloves garlic, minced",
+        "1 inch ginger, grated",
+        "3 tbsp soy sauce",
+        "2 tbsp sesame oil",
+        "1 tbsp cornstarch",
+        "2 tbsp vegetable oil"
+      ],
+      steps: [
+        "Mix soy sauce, sesame oil, and cornstarch in a bowl",
+        "Heat vegetable oil in a large wok or pan over high heat",
+        "Add chicken and cook until golden, about 5 minutes",
+        "Add garlic and ginger, stir for 30 seconds",
+        "Add vegetables and stir-fry for 3-4 minutes until crisp-tender",
+        "Pour sauce over everything and toss to combine",
+        "Serve over rice or noodles"
+      ],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      schemaVersion: 1
+    }
+  ];
+}
+
+function readPlanner(isoWeek: IsoWeekString): PlannerWeek {
+  return getJSON<PlannerWeek>(`${STORAGE_PLANNER_PREFIX}${isoWeek}`, blankWeek());
+}
+function writePlanner(isoWeek: IsoWeekString, week: PlannerWeek) {
+  setJSON(`${STORAGE_PLANNER_PREFIX}${isoWeek}`, week);
+}
+
+/* ---------- store ---------- */
+
+export const useRecipeStore = create<StoreState>()(
   persist(
     (set, get) => ({
-      /* ---- recipes ---- */
-      recipes: [],
-      addRecipe: (r) => set({ recipes: [...get().recipes, r] }),
-      setRecipes: (rs) => set({ recipes: rs }),
-      updateRecipe: (id, patch) =>
-        set({ recipes: get().recipes.map((r) => (r.id === id ? { ...r, ...patch } : r)) }),
-      deleteRecipe: (id) => set({ recipes: get().recipes.filter((r) => r.id !== id) }),
+      // data
+      recipes: getJSON<Recipe[]>(STORAGE_RECIPES, getSampleRecipes()),
+      plannerByWeek: {},
 
-      /* ---- export/import ---- */
-      exportData: () => JSON.stringify({ version: 1, recipes: get().recipes, plannerByWeek: get().plannerByWeek }, null, 2),
+      // filters
+      textQuery: "",
+      selectedCategories: [],
+      selectedTagsByCategory: {},
 
-      importData: (jsonText, options) => {
-        try {
-          const parsed = JSON.parse(jsonText);
+      /* ---- recipe ops ---- */
 
-          // recipes: array or { recipes: [...] }
-          const incomingRecipes: Recipe[] = Array.isArray(parsed)
-            ? parsed
-            : Array.isArray(parsed?.recipes)
-            ? parsed.recipes
-            : [];
+      addRecipe: (input) => {
+        const now = new Date().toISOString();
+        const id = input.id ?? crypto.randomUUID();
+        const recipe: Recipe = {
+          ...input,
+          id,
+          createdAt: now,
+          updatedAt: now,
+          schemaVersion: 1,
+        };
+      
+        set((s) => ({ recipes: [recipe, ...s.recipes] }));
+        setJSON(STORAGE_RECIPES, get().recipes);
+        return id;
+      },
+      
+      updateRecipe: (id, updates) => {
+        set((s) => ({
+          recipes: s.recipes.map((r) =>
+            r.id === id
+              ? {
+                  ...r,
+                  ...updates,
+                  updatedAt: new Date().toISOString(),
+                  schemaVersion: 1,
+                }
+              : r
+          ),
+        }));
+        setJSON(STORAGE_RECIPES, get().recipes);
+      },      
 
-          // planner: accept either { plannerByWeek: {week: {data}} } or legacy { planner: {week: grid}}
-          const incomingPlannerByWeek: Record<IsoWeekString, PlannerWeek> =
-            parsed?.plannerByWeek
-              ? parsed.plannerByWeek
-              : parsed?.planner
-              ? Object.fromEntries(
-                  Object.entries(parsed.planner as Record<string, PlannerGrid>).map(([k, grid]) => [
-                    k,
-                    { data: grid as PlannerGrid },
-                  ])
-                )
-              : {};
+      deleteRecipe: (id) => {
+        set((s) => ({ recipes: s.recipes.filter((r) => r.id !== id) }));
+        setJSON(STORAGE_RECIPES, get().recipes);
+      },
 
-          const mode = options?.mode ?? "merge";
+      /* ---- filter setters ---- */
 
-          if (mode === "replace") {
-            set({ recipes: incomingRecipes, plannerByWeek: incomingPlannerByWeek });
-            return { success: true, message: `Imported ${incomingRecipes.length} recipes (replaced).` };
-          }
+      setTextQuery: (q) => set({ textQuery: q }),
+      setSelectedCategories: (cats) => set({ selectedCategories: cats }),
+      setSelectedTags: (section, tags) =>
+        set((s) => ({
+          selectedTagsByCategory: { ...s.selectedTagsByCategory, [section]: tags },
+        })),
 
-          // merge recipes by id
-          const byId = new Map(get().recipes.map((r) => [r.id, r]));
-          let updated = 0,
-            added = 0;
-          for (const r of incomingRecipes) {
-            if (byId.has(r.id)) {
-              byId.set(r.id, { ...byId.get(r.id)!, ...r });
-              updated++;
-            } else {
-              byId.set(r.id, r);
-              added++;
-            }
-          }
+      /* ---- derived ---- */
 
-          // shallow merge planner weeks (incoming wins per-week)
-          const mergedPlannerByWeek = { ...get().plannerByWeek, ...incomingPlannerByWeek };
-
-          set({ recipes: Array.from(byId.values()), plannerByWeek: mergedPlannerByWeek });
-          return {
-            success: true,
-            message: `Imported ${incomingRecipes.length} recipes (added ${added}, updated ${updated}).`,
-          };
-        } catch (e: any) {
-          return { success: false, message: `Import failed: ${e?.message || e}` };
-        }
+      filterRecipes: () => {
+        const { recipes, textQuery, selectedCategories, selectedTagsByCategory } = get();
+        const q = textQuery.trim().toLowerCase();
+        
+        return recipes.filter((r) => {
+          // text haystack
+          const haystack = [
+            r.title,
+            r.description || '',
+            ...r.categories,
+            ...r.ingredients,
+            ...r.steps,
+            r.difficulty || '',
+            r.cuisine || '',
+            ...(r.extraTags || []),
+          ].map((s) => (s || "").toString().toLowerCase());
+        
+          const textOk = !q || haystack.some((s) => s.includes(q));
+        
+          // categories: AND logic
+          const catsOk =
+            selectedCategories.length === 0 ||
+            selectedCategories.every((sel) =>
+              r.categories.map((c) => c.toLowerCase()).includes(sel.toLowerCase())
+            );
+        
+          return textOk && catsOk;
+        });      
       },
 
       /* ---- planner ---- */
-      plannerByWeek: {},
 
-      getCurrentIsoWeek: () => getIsoWeekId(),
+      getCurrentIsoWeek: () => computeIsoWeek(new Date()),
 
-      ensureWeek: (weekId) => {
-        if (!get().plannerByWeek[weekId]) {
+      nextWeek: (isoWeek) => {
+        const [yearStr, weekStr] = isoWeek.split("-W");
+        const year = Number(yearStr);
+        const week = Number(weekStr);
+        const d = firstDateOfIsoWeek(year, week);
+        d.setUTCDate(d.getUTCDate() + 7);
+        return computeIsoWeek(new Date(d));
+      },
+
+      prevWeek: (isoWeek) => {
+        const [yearStr, weekStr] = isoWeek.split("-W");
+        const year = Number(yearStr);
+        const week = Number(weekStr);
+        const d = firstDateOfIsoWeek(year, week);
+        d.setUTCDate(d.getUTCDate() - 7);
+        return computeIsoWeek(new Date(d));
+      },
+
+      ensureWeek: (isoWeek) => {
+        const existing = readPlanner(isoWeek);
+        set((state) => ({
+          plannerByWeek: { ...state.plannerByWeek, [isoWeek]: existing },
+        }));
+      },
+
+      addToSlot: (isoWeek, day, slot, recipeId: string) => {
+        const state = get();
+        const week = state.plannerByWeek[isoWeek] ?? readPlanner(isoWeek);
+        const list = week.data[day][slot];
+        if (!list.includes(recipeId)) list.push(recipeId);
+        writePlanner(isoWeek, week);
+        set((s) => ({
+          plannerByWeek: { ...s.plannerByWeek, [isoWeek]: { ...week } },
+        }));
+      },
+
+      removeFromSlot: (isoWeek, day, slot, recipeId: string) => {
+        const state = get();
+        const week = state.plannerByWeek[isoWeek] ?? readPlanner(isoWeek);
+        week.data[day][slot] = week.data[day][slot].filter((id) => id !== recipeId);
+        writePlanner(isoWeek, week);
+        set((s) => ({
+          plannerByWeek: { ...s.plannerByWeek, [isoWeek]: { ...week } },
+        }));
+      },
+
+      clearWeek: (isoWeek) => {
+        const week = blankWeek();
+        writePlanner(isoWeek, week);
+        set((s) => ({ plannerByWeek: { ...s.plannerByWeek, [isoWeek]: week } }));
+      },
+
+      // data management
+      exportData: () => {
+        const state = get();
+        const exportData: ExportData = {
+          schemaVersion: 1,
+          exportedAt: new Date().toISOString(),
+          recipes: state.recipes,
+          planner: state.plannerByWeek,
+        };
+        return JSON.stringify(exportData, null, 2);
+      },
+
+      importData: (jsonData: string, replacePlanner = false) => {
+        try {
+          const parsed = JSON.parse(jsonData);
+          const validated = validateExportData(parsed);
+          
+          // Merge recipes by ID (upsert)
+          const currentRecipes = get().recipes;
+          const existingIds = new Set(currentRecipes.map(r => r.id));
+          
+          const mergedRecipes = [...currentRecipes];
+          for (const importedRecipe of validated.recipes) {
+            // Normalize date fields to strings
+            const normalizedRecipe = {
+              ...importedRecipe,
+              createdAt: importedRecipe.createdAt ? 
+                (typeof importedRecipe.createdAt === 'number' ? 
+                  new Date(importedRecipe.createdAt).toISOString() : 
+                  importedRecipe.createdAt) : undefined,
+              updatedAt: importedRecipe.updatedAt ? 
+                (typeof importedRecipe.updatedAt === 'number' ? 
+                  new Date(importedRecipe.updatedAt).toISOString() : 
+                  importedRecipe.updatedAt) : undefined,
+            };
+            
+            const existingIndex = mergedRecipes.findIndex(r => r.id === normalizedRecipe.id);
+            if (existingIndex >= 0) {
+              // Update existing recipe
+              mergedRecipes[existingIndex] = normalizedRecipe;
+            } else {
+              // Add new recipe
+              mergedRecipes.push(normalizedRecipe);
+            }
+          }
+
+          // Handle planner data based on mode
+          const currentPlanner = get().plannerByWeek;
+          let mergedPlanner: Record<IsoWeekString, PlannerWeek>;
+          
+          if (replacePlanner) {
+            // Replace mode: use import file's planner exactly (or empty if import has no planner)
+            mergedPlanner = {};
+            for (const [weekId, weekData] of Object.entries(validated.planner)) {
+              mergedPlanner[weekId as IsoWeekString] = weekData as PlannerWeek;
+            }
+          } else {
+            // Merge mode: union recipe IDs per cell (additive behavior)
+            mergedPlanner = { ...currentPlanner };
+            for (const [weekId, weekData] of Object.entries(validated.planner)) {
+              if (mergedPlanner[weekId as IsoWeekString]) {
+                // Merge existing week - union recipe IDs per day/slot
+                const existingWeek = mergedPlanner[weekId as IsoWeekString];
+                for (const day of PlannerDays) {
+                  for (const slot of PlannerSlots) {
+                    const existing = existingWeek.data[day][slot] || [];
+                    const imported = weekData.data[day]?.[slot] || [];
+                    const combined = [...new Set([...existing, ...imported])]; // Remove duplicates
+                    existingWeek.data[day][slot] = combined;
+                  }
+                }
+              } else {
+                // Add new week
+                mergedPlanner[weekId as IsoWeekString] = weekData as PlannerWeek;
+              }
+            }
+          }
+
+          // Update store
           set({
-            plannerByWeek: {
-              ...get().plannerByWeek,
-              [weekId]: { data: makeEmptyGrid() },
-            },
+            recipes: mergedRecipes,
+            plannerByWeek: mergedPlanner,
           });
+
+          // Persist to localStorage
+          setJSON(STORAGE_RECIPES, mergedRecipes);
+          
+          // Always clear all existing planner data first, then write new data
+          if (isBrowser()) {
+            const keys = Object.keys(localStorage);
+            keys.forEach(key => {
+              if (key.startsWith(STORAGE_PLANNER_PREFIX)) {
+                localStorage.removeItem(key);
+              }
+            });
+          }
+          
+          // Write new planner data
+          for (const [weekId, week] of Object.entries(mergedPlanner)) {
+            writePlanner(weekId as IsoWeekString, week);
+          }
+
+          const plannerMessage = Object.keys(mergedPlanner).length > 0 
+            ? `${Object.keys(mergedPlanner).length} planner weeks` 
+            : 'planner data cleared';
+            
+          return {
+            success: true,
+            message: `Successfully imported ${validated.recipes.length} recipes and ${plannerMessage}.`,
+          };
+        } catch (error) {
+          return {
+            success: false,
+            message: `Import failed: ${error instanceof Error ? error.message : 'Invalid file format'}`,
+          };
         }
       },
-
-      getWeek: (weekId) => {
-        const week = get().plannerByWeek[weekId];
-        return week ?? { data: makeEmptyGrid() };
-      },
-
-      offsetWeek: (weekId, delta) => offsetIsoWeek(weekId, delta),
-      prevWeek: (weekId) => offsetIsoWeek(weekId, -1),
-      nextWeek: (weekId) => offsetIsoWeek(weekId, +1),
-
-      addToSlot: (weekId, day, slot, recipeId) =>
-        set(() => {
-          const week = get().plannerByWeek[weekId] ?? { data: makeEmptyGrid() };
-          const grid = { ...week.data };
-          const dayRow = { ...(grid[day] ?? {}) };
-          dayRow[slot] = [...(dayRow[slot] ?? []), recipeId];
-          grid[day] = dayRow;
-          return {
-            plannerByWeek: { ...get().plannerByWeek, [weekId]: { data: grid } },
-          };
-        }),
-
-      removeFromSlot: (weekId, day, slot, recipeId) =>
-        set(() => {
-          const week = get().plannerByWeek[weekId] ?? { data: makeEmptyGrid() };
-          const grid = { ...week.data };
-          const list = (grid[day]?.[slot] ?? []).filter((id: string) => id !== recipeId);
-          grid[day] = { ...(grid[day] ?? {}), [slot]: list };
-          return {
-            plannerByWeek: { ...get().plannerByWeek, [weekId]: { data: grid } },
-          };
-        }),
-
-      clearWeek: (weekId) =>
-        set(() => ({
-          plannerByWeek: { ...get().plannerByWeek, [weekId]: { data: makeEmptyGrid() } },
-        })),
     }),
     {
-      name: "recipes",
-      storage: createJSONStorage(() =>
-        typeof window !== "undefined" ? window.localStorage : (noopStorage as any)
-      ),
-      // Persist exactly what the app reads
-      partialize: (state) => ({
-        recipes: state.recipes,
-        plannerByWeek: state.plannerByWeek,
-      }),
+      name: "fra:root",
+      partialize: (s) => ({ recipes: s.recipes }),
+      storage: {
+        getItem: () => {
+          if (!isBrowser()) return null as any;
+          const recipes = getJSON<Recipe[]>(STORAGE_RECIPES, []);
+          return { state: JSON.stringify({ recipes }) } as any;
+        },
+        setItem: (_name, value) => {
+          try {
+            const state = JSON.parse(value as any);
+            setJSON(STORAGE_RECIPES, state.state.recipes ?? []);
+          } catch {}
+        },
+        removeItem: () => {},
+      },
     }
   )
 );

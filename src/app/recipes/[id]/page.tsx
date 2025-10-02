@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useRecipeStore, type Recipe } from "@/store/recipes";
+import { useRecipeStore } from "@/store/recipes";
+import type { Recipe } from "@/types/recipe";
 import { Button, Card } from "@/components/UI";
 import { RecipeForm } from "@/components/RecipeForm";
 import { ArrowLeft, Edit, Trash2, Clock, Users, ChefHat } from "lucide-react";

@@ -1,74 +1,54 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRecipeStore, type Recipe } from "@/store/recipes";
+import Link from "next/link";
+
+import { useRecipeStore } from "@/store/recipes";
 import { RecipeForm } from "@/components/RecipeForm";
-import { Button } from "@/components/UI";
-import { ArrowLeft } from "lucide-react";
+import type { Recipe } from "@/types/recipe";
 
-// SSR-safe id generator
-function generateId(): string {
-  // browser crypto if present, else fallback
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return (
-    Math.random().toString(36).slice(2) +
-    "-" +
-    Date.now().toString(36)
-  );
-}
+// tiny local id helper (uses crypto if available)
+const generateId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
 
-// Clean up potential nulls from the form and supply required defaults
 function buildNewRecipe(data: Partial<Recipe>): Recipe {
-  const now = Date.now();
+  const nowIso = new Date().toISOString();
 
   return {
     id: generateId(),
     title: (data.title ?? "Untitled Recipe").toString(),
+    description: (data.description as string | undefined) ?? "",
 
-    description:
-      (data.description as unknown as string | undefined) ?? "",
+    // content
+    ingredients: Array.isArray(data.ingredients) ? (data.ingredients as string[]) : [],
+    steps: Array.isArray(data.steps) ? (data.steps as string[]) : [],
 
-    ingredients: Array.isArray(data.ingredients)
-      ? (data.ingredients as string[])
-      : [],
-    steps: Array.isArray(data.steps)
-      ? (data.steps as string[])
-      : [],
-
-    // optional arrays
-    categories: Array.isArray(data.categories)
-      ? (data.categories as string[])
-      : [],
-    tags: Array.isArray(data.tags) ? (data.tags as string[]) : [],
-    extraTags: Array.isArray(data.extraTags)
-      ? (data.extraTags as string[])
-      : [],
+    // canonical categories + optional extra tags
+    categories: Array.isArray(data.categories) ? (data.categories as string[]) : [],
+    extraTags: Array.isArray((data as any)?.extraTags) ? ((data as any).extraTags as string[]) : [],
 
     // optionals (coerce null -> undefined)
-    difficulty:
-      (data as any).difficulty === null ? undefined : (data as any).difficulty,
-    cuisine:
-      (data as any).cuisine === null ? undefined : (data as any).cuisine,
-
+    difficulty: (data as any)?.difficulty ?? undefined,
+    cuisine: (data as any)?.cuisine ?? undefined,
     time:
-      data.time == null
+      (data as any)?.time == null
         ? undefined
         : {
-            ...data.time,
+            ...(data as any).time,
             total:
-              (data.time as any).total === null
+              (data as any).time?.total == null
                 ? undefined
-                : (data.time as any).total,
+                : (data as any).time.total,
           },
 
-    // timestamps (Sprint 2 UI handled number|string|Date)
-    createdAt: now,
-    updatedAt: now,
+    // bookkeeping
+    createdAt: nowIso,
+    updatedAt: nowIso,
 
-    // keep if your type includes it; harmless if ignored
-    schemaVersion: (data as any).schemaVersion ?? 1,
+    // schema (harmless if your type ignores it)
+    schemaVersion: (data as any)?.schemaVersion ?? 1,
   };
 }
 
@@ -76,29 +56,31 @@ export default function NewRecipePage() {
   const router = useRouter();
   const { addRecipe } = useRecipeStore();
 
+  const handleSubmit = (data: Partial<Recipe>) => {
+    const recipe = buildNewRecipe(data);
+    addRecipe(recipe);
+    router.push("/recipes");
+  };
+
+  const initial: Partial<Recipe> = {
+    title: "",
+    description: "",
+    categories: [],
+    extraTags: [],
+    ingredients: [],
+    steps: [],
+  };
+
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
-      <div className="mb-4">
-        <Button
-          variant="secondary"
-          onClick={() => router.push("/recipes")}
-          iconLeft={<ArrowLeft className="h-4 w-4" />}
-        >
-          Back to Recipes
-        </Button>
+    <main className="mx-auto max-w-3xl p-4 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">New Recipe</h1>
+        <Link href="/recipes" className="text-sm underline">
+          ← Back to recipes
+        </Link>
       </div>
 
-      <h1 className="mb-6 text-3xl font-bold text-gray-900">New Recipe</h1>
-
-      <RecipeForm
-        submitLabel="Create"
-        onCancel={() => router.push("/recipes")}
-        onSubmit={(data) => {
-          const newRecipe = buildNewRecipe(data as Partial<Recipe>);
-          addRecipe(newRecipe);                       // ✅ pass a full Recipe
-          router.push(`/recipes/${encodeURIComponent(newRecipe.id)}`); // go to detail
-        }}
-      />
+      <RecipeForm initial={initial} onSubmit={handleSubmit} />
     </main>
   );
 }

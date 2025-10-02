@@ -1,85 +1,57 @@
 "use client";
-import type { Recipe } from "@/types/recipe";
-import { Card } from "@/components/UI";
+
 import Link from "next/link";
+import TagPill from "./TagPill";
+import type { Recipe } from "@/types/recipe";
 
 type Props = {
   recipe: Recipe;
+  onTagClick?: (tag: string) => void; // optional, not required
 };
 
-// Map categories → header color (adjust as you like)
-const CATEGORY_COLOR: Record<string, string> = {
-  Pasta: "#8BD17C",
-  "Meat Dish": "#FCA5A5",
-  Fish: "#86E3D4",
-  Soup: "#B8C7FF",
-  Vegetarian: "#C7F464",
-  Dessert: "#F7C6A3",
-  Snack: "#FFD166",
-  "Side Dish": "#F4A261",
-  Salad: "#90E0EF",
-};
-
-export function RecipeCard({ recipe }: Props) {
-
-  // pick the first category to color the card
-  const firstCategory = recipe.categories?.[0];
-  const header = firstCategory
-    ? CATEGORY_COLOR[firstCategory] ?? "#E5E7EB"
-    : "#E5E7EB";
+export function RecipeCard({ recipe, onTagClick }: Props) {
+  const tags = ((recipe as any).tags as string[] | undefined) ?? [];
+  const categories = ((recipe as any).categories as string[] | undefined) ?? [];
+  const extraTags = ((recipe as any).extraTags as string[] | undefined) ?? [];
 
   return (
-    <Card className="overflow-hidden">
-      {/* Header with emoji */}
-      <div
-        className="h-24 flex items-center justify-center"
-        style={{ background: header }}
-      >
-        <span className="text-5xl opacity-90">👨‍🍳</span>
-      </div>
-
-      <div className="p-4">
-        <div>
-          <Link href={`/recipes/${recipe.id}`} className="hover:text-orange-600 transition-colors">
-            <h3 className="text-lg font-semibold">{recipe.title}</h3>
+    <div className="group rounded-2xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="text-base font-semibold leading-tight">
+          <Link href={`/recipes/${recipe.id}`} className="hover:underline">
+            {recipe.title}
           </Link>
-          {recipe.categories?.length > 0 && (
-            <p className="text-xs text-gray-600">
-              {recipe.categories.join(", ")}
-            </p>
-          )}
-        </div>
-
-        {/* Optional description */}
-        {recipe.description && (
-          <p className="mt-2 text-sm text-gray-600">{recipe.description}</p>
-        )}
-
-        {/* Meta info row: show if present */}
-        <div className="mt-2 flex flex-wrap gap-4 text-xs text-gray-600">
-          {recipe.time?.total && <span>⏱️ {typeof recipe.time.total === 'number' ? `${recipe.time.total} min` : recipe.time.total}</span>}
-          {recipe.difficulty && (
-            <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-700">
-              {recipe.difficulty}
-            </span>
-          )}
-          {recipe.cuisine && <span>🌍 {recipe.cuisine}</span>}
-        </div>
-
-        {/* Extra Tags */}
-        {recipe.extraTags && recipe.extraTags.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {recipe.extraTags.map((tag) => (
-              <span
-                key={tag}
-                className="rounded-full bg-gray-100 border border-gray-200 px-3 py-1 text-xs text-gray-700"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        )}
+        </h3>
       </div>
-    </Card>
+
+      {recipe.description ? (
+        <p className="mt-2 text-sm text-slate-600 line-clamp-2">{recipe.description}</p>
+      ) : null}
+
+      {/* show categories / extraTags if present */}
+      {(categories.length || extraTags.length) ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {categories.map((t) => (
+            <TagPill key={`cat-${t}`} tag={t} />
+          ))}
+          {extraTags.map((t) => (
+            <TagPill key={`x-${t}`} tag={t} />
+          ))}
+        </div>
+      ) : null}
+
+      {/* show main tags (the ones we filter by) */}
+      {tags.length ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {tags.map((t) => (
+            <TagPill
+              key={`tag-${t}`}
+              tag={t}
+              onClick={onTagClick}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }

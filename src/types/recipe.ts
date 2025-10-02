@@ -8,31 +8,26 @@ export const DIFFICULTY_OPTIONS = ["Easy", "Medium", "Hard"] as const;
 
 export type Difficulty = 'Easy' | 'Medium' | 'Hard';
 
+// src/types/recipe.ts
 export type Recipe = {
   id: string;
   title: string;
   description?: string;
 
-  // canonical categorization (multi-select)
-  categories: string[];            // e.g., ["Pasta", "Vegetarian"]
+  categories: string[];
 
-  // meta
-  time?: { total?: number | string | null }; // minutes or time range string
+  time?: { total?: number | string | null };
   difficulty?: Difficulty | string | null;
   cuisine?: string | null;
 
-  // optional extra tagging
+  tags?: string[];        // keep for future, unused now
   extraTags?: string[];
 
-  // content
   ingredients: string[];
   steps: string[];
 
-  // bookkeeping
-  createdAt?: string; // ISO
-  updatedAt?: string; // ISO
-
-  // schema
+  createdAt?: string;
+  updatedAt?: string;
   schemaVersion?: 1;
 };
 
